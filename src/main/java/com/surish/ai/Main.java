@@ -3,6 +3,9 @@ package com.surish.ai;
 import com.surish.ai.llm.corpus.ClasspathCorpusLoader;
 import com.surish.ai.llm.corpus.Corpus;
 import com.surish.ai.llm.corpus.CorpusLoader;
+import com.surish.ai.llm.encoding.CharacterCorpusEncoder;
+import com.surish.ai.llm.encoding.CorpusEncoder;
+import com.surish.ai.llm.encoding.EncodedCorpus;
 import com.surish.ai.llm.tokenizer.CharacterTokenizer;
 import com.surish.ai.llm.tokenizer.Tokenizer;
 import com.surish.ai.llm.vocabulary.CharacterVocabularyBuilder;
@@ -33,15 +36,13 @@ public class Main {
         Vocabulary<Character> vocabulary =
             builder.build(tokens);
 
-        System.out.println("Corpus Size      : " + corpus.length());
-        System.out.println("Token Count      : " + tokens.size());
-        System.out.println("Vocabulary Size  : " + vocabulary.size());
+        CorpusEncoder<Character> encoder =
+            new CharacterCorpusEncoder();
 
-        System.out.println();
+        EncodedCorpus encodedCorpus =
+            encoder.encode(tokens, vocabulary);
 
-        System.out.println("Z -> " + vocabulary.encode('Z'));
-        System.out.println("20 -> " + vocabulary.decode(20));
-        System.out.println(vocabulary.decode(vocabulary.encode('H')));
+        System.out.println(encodedCorpus.tokenIds().subList(0, 300));
 
     }
 }
