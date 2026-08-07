@@ -9,6 +9,8 @@ import com.surish.ai.llm.embedding.RandomEmbeddingLayer;
 import com.surish.ai.llm.encoding.CharacterCorpusEncoder;
 import com.surish.ai.llm.encoding.CorpusEncoder;
 import com.surish.ai.llm.encoding.EncodedCorpus;
+import com.surish.ai.llm.nn.LinearNeuron;
+import com.surish.ai.llm.nn.Neuron;
 import com.surish.ai.llm.tokenizer.CharacterTokenizer;
 import com.surish.ai.llm.tokenizer.Tokenizer;
 import com.surish.ai.llm.vocabulary.CharacterVocabularyBuilder;
@@ -45,22 +47,28 @@ public class Main {
         EncodedCorpus encodedCorpus =
             encoder.encode(tokens, vocabulary);
 
-        System.out.println(encodedCorpus.tokenIds().subList(0, 10));
+//        System.out.println(encodedCorpus.tokenIds().subList(0, 10));
 
         EmbeddingLayer embeddingLayer =
             new RandomEmbeddingLayer(
-                vocabulary.size(),
-                16);
+                vocabulary.size(),16);
 
         Embedding embedding =
-            embeddingLayer.lookup(
-                vocabulary.encode('H'));
+            embeddingLayer.lookup(vocabulary.encode('T'));
 
-        System.out.println("-------------------------------------------------");
+        Neuron neuron = new LinearNeuron(embedding.dimension());
 
-        System.out.println(
-            embedding.vector()
-        );
+        double output = neuron.forward(embedding.vector());
+
+        System.out.println("----------------------------------------------------");
+
+        System.out.println("Embedding");
+        System.out.println(embedding.vector());
+
+        System.out.println("----------------------------------------------------");
+
+        System.out.println("Neuron Output");
+        System.out.println(output);
 
     }
 }
