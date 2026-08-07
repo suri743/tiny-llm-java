@@ -3,6 +3,9 @@ package com.surish.ai;
 import com.surish.ai.llm.corpus.ClasspathCorpusLoader;
 import com.surish.ai.llm.corpus.Corpus;
 import com.surish.ai.llm.corpus.CorpusLoader;
+import com.surish.ai.llm.embedding.Embedding;
+import com.surish.ai.llm.embedding.EmbeddingLayer;
+import com.surish.ai.llm.embedding.RandomEmbeddingLayer;
 import com.surish.ai.llm.encoding.CharacterCorpusEncoder;
 import com.surish.ai.llm.encoding.CorpusEncoder;
 import com.surish.ai.llm.encoding.EncodedCorpus;
@@ -42,7 +45,22 @@ public class Main {
         EncodedCorpus encodedCorpus =
             encoder.encode(tokens, vocabulary);
 
-        System.out.println(encodedCorpus.tokenIds().subList(0, 300));
+        System.out.println(encodedCorpus.tokenIds().subList(0, 10));
+
+        EmbeddingLayer embeddingLayer =
+            new RandomEmbeddingLayer(
+                vocabulary.size(),
+                16);
+
+        Embedding embedding =
+            embeddingLayer.lookup(
+                vocabulary.encode('H'));
+
+        System.out.println("-------------------------------------------------");
+
+        System.out.println(
+            embedding.vector()
+        );
 
     }
 }

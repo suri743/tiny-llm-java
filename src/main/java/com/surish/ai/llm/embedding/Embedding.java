@@ -1,9 +1,11 @@
 package com.surish.ai.llm.embedding;
 
-public record Embedding(double[] values) {
+import com.surish.ai.llm.tensor.Vector;
+
+public record Embedding(Vector vector) {
 
     public int dimension() {
-        return values.length;
+        return vector.size();
     }
 
 }
