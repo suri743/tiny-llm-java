@@ -9,8 +9,12 @@ import com.surish.ai.llm.embedding.RandomEmbeddingLayer;
 import com.surish.ai.llm.encoding.CharacterCorpusEncoder;
 import com.surish.ai.llm.encoding.CorpusEncoder;
 import com.surish.ai.llm.encoding.EncodedCorpus;
+import com.surish.ai.llm.nn.DenseLayer;
 import com.surish.ai.llm.nn.LinearNeuron;
+import com.surish.ai.llm.nn.LossFunction;
+import com.surish.ai.llm.nn.MeanSquaredError;
 import com.surish.ai.llm.nn.Neuron;
+import com.surish.ai.llm.tensor.Vector;
 import com.surish.ai.llm.tokenizer.CharacterTokenizer;
 import com.surish.ai.llm.tokenizer.Tokenizer;
 import com.surish.ai.llm.vocabulary.CharacterVocabularyBuilder;
@@ -56,19 +60,74 @@ public class Main {
         Embedding embedding =
             embeddingLayer.lookup(vocabulary.encode('T'));
 
-        Neuron neuron = new LinearNeuron(embedding.dimension());
+//        Neuron neuron = new LinearNeuron(embedding.dimension());
+//
+//        double output = neuron.forward(embedding.vector());
+//
+//        System.out.println("----------------------------------------------------");
+//
+//        System.out.println("Embedding");
+//        System.out.println(embedding.vector());
+//
+//        System.out.println("----------------------------------------------------");
+//
+//        System.out.println("Neuron Output");
+//        System.out.println(output);
 
-        double output = neuron.forward(embedding.vector());
+        DenseLayer denseLayer =
+            new DenseLayer(
+                embedding.dimension(),
+                8);
 
-        System.out.println("----------------------------------------------------");
+        Vector output =
+            denseLayer.forward(embedding.vector());
+
+// Target for this training example
+        Vector target = new Vector(8);
+
+// For now, we are manually defining the target
+        target.set(0, 1.0);
+        target.set(1, 0.0);
+        target.set(2, 0.0);
+        target.set(3, 0.0);
+        target.set(4, 0.0);
+        target.set(5, 0.0);
+        target.set(6, 0.0);
+        target.set(7, 0.0);
+
+        LossFunction lossFunction =
+            new MeanSquaredError();
+
+        double loss =
+            lossFunction.calculate(output, target);
+
+        Vector gradient =
+            lossFunction.gradient(output, target);
+
+        System.out.println();
 
         System.out.println("Embedding");
         System.out.println(embedding.vector());
 
         System.out.println("----------------------------------------------------");
 
-        System.out.println("Neuron Output");
+        System.out.println("Dense Layer Output");
         System.out.println(output);
+
+        System.out.println("----------------------------------------------------");
+
+        System.out.println("Target");
+        System.out.println(target);
+
+        System.out.println("----------------------------------------------------");
+
+        System.out.println("Loss");
+        System.out.println(loss);
+
+        System.out.println("----------------------------------------------------");
+
+        System.out.println("Loss Gradient");
+        System.out.println(gradient);
 
     }
 }

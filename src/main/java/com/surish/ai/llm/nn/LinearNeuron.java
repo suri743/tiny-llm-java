@@ -7,8 +7,7 @@ import java.util.Random;
 public class LinearNeuron implements Neuron {
 
     private final Vector weights;
-
-    private final double bias;
+    private double bias;
 
     public LinearNeuron(int inputSize) {
 
@@ -37,5 +36,24 @@ public class LinearNeuron implements Neuron {
         }
 
         return sum;
+    }
+
+    @Override
+    public void backward(Vector input, double outputGradient,
+                         double learningRate) {
+
+        for (int i = 0; i < weights.size(); i++) {
+
+            double weightGradient =
+                outputGradient * input.get(i);
+
+            double newWeight =
+                weights.get(i)
+                - learningRate * weightGradient;
+
+            weights.set(i, newWeight);
+        }
+
+        bias -= learningRate * outputGradient;
     }
 }

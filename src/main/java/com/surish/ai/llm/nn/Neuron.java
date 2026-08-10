@@ -6,4 +6,6 @@ public interface Neuron {
 
     double forward(Vector input);
 
+    void backward(Vector input, double outputGradient, double learningRate);
+
 }
