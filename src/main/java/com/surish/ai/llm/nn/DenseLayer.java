@@ -27,4 +27,16 @@ public class DenseLayer implements Layer {
 
         return output;
     }
+
+    @Override
+    public Vector backward(Vector input, Vector outputGradient, double learningRate) {
+        Vector inputGradient = new Vector(input.size());
+        for (int i = 0; i < neurons.size(); i++) {
+            Vector neuronGradient = neurons.get(i).backward(input, outputGradient.get(i), learningRate);
+            for (int j = 0; j < input.size(); j++) {
+                inputGradient.set(j, inputGradient.get(j) + neuronGradient.get(j));
+            }
+        }
+        return inputGradient;
+    }
 }

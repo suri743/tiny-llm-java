@@ -6,12 +6,12 @@ import java.util.Random;
 
 public class LinearNeuron implements Neuron {
 
+    private static final Random random = new Random(42);
+
     private final Vector weights;
     private double bias;
 
     public LinearNeuron(int inputSize) {
-
-        Random random = new Random(42);
 
         weights = new Vector(inputSize);
 
@@ -39,7 +39,7 @@ public class LinearNeuron implements Neuron {
     }
 
     @Override
-    public void backward(Vector input, double outputGradient,
+    public Vector backward(Vector input, double outputGradient,
                          double learningRate) {
 
         for (int i = 0; i < weights.size(); i++) {
@@ -55,5 +55,11 @@ public class LinearNeuron implements Neuron {
         }
 
         bias -= learningRate * outputGradient;
+
+        Vector inputGradient = new Vector(weights.size());
+        for (int i = 0; i < weights.size(); i++) {
+            inputGradient.set(i, outputGradient * weights.get(i));
+        }
+        return inputGradient;
     }
 }
