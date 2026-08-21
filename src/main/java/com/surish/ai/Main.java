@@ -43,7 +43,7 @@ public class Main {
         EncodedCorpus encodedCorpus = encoder.encode(tokens, vocabulary);
 
         EmbeddingLayer embeddingLayer = new RandomEmbeddingLayer(vocabulary.size(), 16);
-        DenseLayer denseLayer = new DenseLayer(16, 8);
+        DenseLayer denseLayer = new DenseLayer(16, vocabulary.size());
         LossFunction lossFunction = new MeanSquaredError();
 
         double learningRate = 0.01;
@@ -64,8 +64,8 @@ public class Main {
             Vector output = denseLayer.forward(embedding.vector());
 
             // Target: one-hot over DenseLayer output size (placeholder until Stage 12-13)
-            Vector target = new Vector(8);
-            target.set(targetTokenId % 8, 1.0);
+            Vector target = new Vector(vocabulary.size());
+            target.set(targetTokenId, 1.0);
 
             double loss = lossFunction.calculate(output, target);
 
