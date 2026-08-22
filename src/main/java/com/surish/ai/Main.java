@@ -9,9 +9,10 @@ import com.surish.ai.llm.embedding.RandomEmbeddingLayer;
 import com.surish.ai.llm.encoding.CharacterCorpusEncoder;
 import com.surish.ai.llm.encoding.CorpusEncoder;
 import com.surish.ai.llm.encoding.EncodedCorpus;
+import com.surish.ai.llm.nn.CrossEntropyLoss;
 import com.surish.ai.llm.nn.DenseLayer;
 import com.surish.ai.llm.nn.LossFunction;
-import com.surish.ai.llm.nn.MeanSquaredError;
+import com.surish.ai.llm.nn.SoftmaxLayer;
 import com.surish.ai.llm.tensor.Vector;
 import com.surish.ai.llm.tokenizer.CharacterTokenizer;
 import com.surish.ai.llm.tokenizer.Tokenizer;
@@ -44,7 +45,8 @@ public class Main {
 
         EmbeddingLayer embeddingLayer = new RandomEmbeddingLayer(vocabulary.size(), 16);
         DenseLayer denseLayer = new DenseLayer(16, vocabulary.size());
-        LossFunction lossFunction = new MeanSquaredError();
+        SoftmaxLayer softmaxLayer = new SoftmaxLayer();
+        LossFunction lossFunction = new CrossEntropyLoss();
 
         double learningRate = 0.01;
         int trainingExamples = 100;
@@ -61,16 +63,17 @@ public class Main {
 
             // Forward pass
             Embedding embedding = embeddingLayer.lookup(inputTokenId);
-            Vector output = denseLayer.forward(embedding.vector());
+            Vector logits = denseLayer.forward(embedding.vector());
+            Vector probs = softmaxLayer.forward(logits);
 
-            // Target: one-hot over DenseLayer output size (placeholder until Stage 12-13)
+            // Target: one-hot over vocab size
             Vector target = new Vector(vocabulary.size());
             target.set(targetTokenId, 1.0);
 
-            double loss = lossFunction.calculate(output, target);
+            double loss = lossFunction.calculate(probs, target);
 
             // Backward pass
-            Vector outputGradient = lossFunction.gradient(output, target);
+            Vector outputGradient = lossFunction.gradient(probs, target);
             Vector embeddingGradient = denseLayer.backward(embedding.vector(), outputGradient, learningRate);
 
             // Update embedding
