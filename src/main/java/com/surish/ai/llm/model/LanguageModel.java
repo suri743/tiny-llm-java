@@ -15,6 +15,7 @@ import com.surish.ai.llm.vocabulary.Vocabulary;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.Random;
 
 public class LanguageModel {
 
@@ -65,6 +66,10 @@ public class LanguageModel {
     }
 
     public String predict(String seed, int length, Vocabulary<Character> vocabulary) {
+        return predict(seed, length, vocabulary, 0.8);
+    }
+
+    public String predict(String seed, int length, Vocabulary<Character> vocabulary, double temperature) {
         List<Integer> contextIds = new ArrayList<>();
         for (int i = 0; i < config.contextSize; i++) {
             int seedIndex = i - (config.contextSize - seed.length());
@@ -76,19 +81,13 @@ public class LanguageModel {
         }
 
         StringBuilder output = new StringBuilder(seed);
+        Random random = new Random();
 
         for (int i = 0; i < length; i++) {
             Vector[] tokens = buildTokens(contextIds);
             Vector probs = forward(tokens);
 
-            int nextTokenId = 0;
-            double maxProb = probs.get(0);
-            for (int j = 1; j < probs.size(); j++) {
-                if (probs.get(j) > maxProb) {
-                    maxProb = probs.get(j);
-                    nextTokenId = j;
-                }
-            }
+            int nextTokenId = sample(probs, temperature, random);
 
             output.append(vocabulary.decode(nextTokenId));
             contextIds.remove(0);
@@ -96,6 +95,25 @@ public class LanguageModel {
         }
 
         return output.toString();
+    }
+
+    // sample a token index from probability distribution with temperature scaling
+    private int sample(Vector probs, double temperature, Random random) {
+        // apply temperature: divide logits by temperature then re-normalize
+        double[] scaled = new double[probs.size()];
+        double sum = 0.0;
+        for (int i = 0; i < probs.size(); i++) {
+            scaled[i] = Math.pow(probs.get(i), 1.0 / temperature);
+            sum += scaled[i];
+        }
+        // pick by cumulative probability (roulette wheel)
+        double r = random.nextDouble() * sum;
+        double cumulative = 0.0;
+        for (int i = 0; i < scaled.length; i++) {
+            cumulative += scaled[i];
+            if (r <= cumulative) return i;
+        }
+        return scaled.length - 1;
     }
 
     private Vector[] buildTokens(List<Integer> contextIds) {
