@@ -1,6 +1,5 @@
 package com.surish.ai.llm.training;
 
-import com.surish.ai.llm.embedding.EmbeddingLayer;
 import com.surish.ai.llm.encoding.EncodedCorpus;
 import com.surish.ai.llm.model.LanguageModel;
 import com.surish.ai.llm.tensor.Vector;
@@ -63,14 +62,14 @@ public class Trainer {
     private Vector buildContext(int step) {
         int contextSize = model.config.contextSize;
         int embeddingDim = model.config.embeddingDim;
-        EmbeddingLayer embeddingLayer = model.embeddingLayer;
 
         Vector context = new Vector(contextSize * embeddingDim);
         for (int c = 0; c < contextSize; c++) {
             int tokenId = encodedCorpus.get(step - contextSize + c);
-            Vector emb = embeddingLayer.lookup(tokenId).vector();
+            Vector tokenEmb = model.embeddingLayer.lookup(tokenId).vector();
+            Vector posEmb = model.positionalEmbeddingLayer.lookup(c);
             for (int d = 0; d < embeddingDim; d++) {
-                context.set(c * embeddingDim + d, emb.get(d));
+                context.set(c * embeddingDim + d, tokenEmb.get(d) + posEmb.get(d));
             }
         }
         return context;
