@@ -25,8 +25,8 @@ public class Trainer {
         System.out.println("\n--- Training ---\n");
 
         for (int epoch = 1; epoch <= model.config.epochs; epoch++) {
-            double trainLoss = runEpoch(epoch, true);
-            double valLoss = runEpoch(epoch, false);
+            double trainLoss = runEpoch(true);
+            double valLoss = runEpoch(false);
             System.out.printf("Epoch %d complete | train loss: %.4f | val loss: %.4f%n%n",
                 epoch, trainLoss, valLoss);
         }
@@ -34,16 +34,16 @@ public class Trainer {
         System.out.println("--- Training complete ---");
     }
 
-    private double runEpoch(int epoch, boolean training) {
+    private double runEpoch(boolean training) {
         int start = training ? model.config.contextSize : trainSize;
         int end = training ? trainSize : totalTokens;
         double totalLoss = 0.0;
 
         for (int step = start; step < end; step++) {
-            Vector context = buildContext(step);
+            Vector[] tokens = buildTokens(step);
             int targetTokenId = encodedCorpus.get(step + 1);
 
-            Vector probs = model.forward(context);
+            Vector probs = model.forward(tokens);
 
             Vector target = new Vector(probs.size());
             target.set(targetTokenId, 1.0);
@@ -52,26 +52,29 @@ public class Trainer {
 
             if (training) {
                 Vector outputGradient = model.lossFunction.gradient(probs, target);
-                model.denseLayer.backward(context, outputGradient, model.config.learningRate);
+                Vector attentionGrad = model.outputLayer.backward(tokens[tokens.length - 1], outputGradient, model.config.learningRate);
+                model.selfAttention.backward(attentionGrad, model.config.learningRate);
             }
         }
 
         return totalLoss / (end - start);
     }
 
-    private Vector buildContext(int step) {
+    private Vector[] buildTokens(int step) {
         int contextSize = model.config.contextSize;
         int embeddingDim = model.config.embeddingDim;
 
-        Vector context = new Vector(contextSize * embeddingDim);
+        Vector[] tokens = new Vector[contextSize];
         for (int c = 0; c < contextSize; c++) {
             int tokenId = encodedCorpus.get(step - contextSize + c);
             Vector tokenEmb = model.embeddingLayer.lookup(tokenId);
             Vector posEmb = model.positionalEmbeddingLayer.lookup(c);
+            Vector combined = new Vector(embeddingDim);
             for (int d = 0; d < embeddingDim; d++) {
-                context.set(c * embeddingDim + d, tokenEmb.get(d) + posEmb.get(d));
+                combined.set(d, tokenEmb.get(d) + posEmb.get(d));
             }
+            tokens[c] = combined;
         }
-        return context;
+        return tokens;
     }
 }
