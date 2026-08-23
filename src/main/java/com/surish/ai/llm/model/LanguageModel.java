@@ -29,7 +29,7 @@ public class LanguageModel {
         this.config = config;
         this.embeddingLayer = new RandomEmbeddingLayer(vocabSize, config.embeddingDim);
         this.positionalEmbeddingLayer = new PositionalEmbeddingLayer(config.contextSize, config.embeddingDim);
-        this.selfAttention = new SelfAttention(config.embeddingDim);
+        this.selfAttention = new SelfAttention(config.embeddingDim, 4);
         this.outputLayer = new DenseLayer(config.embeddingDim, vocabSize);
         this.softmaxLayer = new SoftmaxLayer();
         this.lossFunction = new CrossEntropyLoss();

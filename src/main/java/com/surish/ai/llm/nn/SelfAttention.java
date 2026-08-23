@@ -7,23 +7,40 @@ import java.util.Random;
 
 public class SelfAttention {
 
-    private final Matrix wQ;
-    private final Matrix wK;
-    private final Matrix wV;
     private final int dim;
+    private final int numHeads;
+    private final int headDim;
 
-    // cached from forward pass for backprop
+    // one W_Q, W_K, W_V per head
+    private final Matrix[] wQ;
+    private final Matrix[] wK;
+    private final Matrix[] wV;
+
+    // output projection: concatenated heads → dim
+    private final Matrix wO;
+
+    // cached for backprop
     private Vector[] cachedTokens;
-    private Vector[] cachedQ;
-    private Vector[] cachedK;
-    private Vector[] cachedV;
-    private double[][] cachedScores;
+    private Vector[][] cachedQ;   // [head][token]
+    private Vector[][] cachedK;
+    private Vector[][] cachedV;
+    private double[][][] cachedScores; // [head][token_i][token_j]
+    private Vector[][] cachedHeadOut;  // [head][token]
 
-    public SelfAttention(int dim) {
+    public SelfAttention(int dim, int numHeads) {
         this.dim = dim;
-        this.wQ = randomMatrix(dim, dim);
-        this.wK = randomMatrix(dim, dim);
-        this.wV = randomMatrix(dim, dim);
+        this.numHeads = numHeads;
+        this.headDim = dim / numHeads;
+
+        wQ = new Matrix[numHeads];
+        wK = new Matrix[numHeads];
+        wV = new Matrix[numHeads];
+        for (int h = 0; h < numHeads; h++) {
+            wQ[h] = randomMatrix(dim, headDim);
+            wK[h] = randomMatrix(dim, headDim);
+            wV[h] = randomMatrix(dim, headDim);
+        }
+        wO = randomMatrix(dim, dim);
     }
 
     private Matrix randomMatrix(int rows, int cols) {
@@ -39,9 +56,7 @@ public class SelfAttention {
         Vector output = new Vector(W.columns());
         for (int i = 0; i < W.columns(); i++) {
             double sum = 0.0;
-            for (int j = 0; j < input.size(); j++) {
-                sum += input.get(j) * W.get(j, i);
-            }
+            for (int j = 0; j < input.size(); j++) sum += input.get(j) * W.get(j, i);
             output.set(i, sum);
         }
         return output;
@@ -55,127 +70,151 @@ public class SelfAttention {
 
     public Vector[] forward(Vector[] tokens) {
         int seqLen = tokens.length;
-        double scale = Math.sqrt(dim);
+        double scale = Math.sqrt(headDim);
 
-        Vector[] Q = new Vector[seqLen];
-        Vector[] K = new Vector[seqLen];
-        Vector[] V = new Vector[seqLen];
-        for (int i = 0; i < seqLen; i++) {
-            Q[i] = project(tokens[i], wQ);
-            K[i] = project(tokens[i], wK);
-            V[i] = project(tokens[i], wV);
+        cachedQ = new Vector[numHeads][seqLen];
+        cachedK = new Vector[numHeads][seqLen];
+        cachedV = new Vector[numHeads][seqLen];
+        cachedScores = new double[numHeads][seqLen][seqLen];
+        cachedHeadOut = new Vector[numHeads][seqLen];
+        cachedTokens = tokens;
+
+        // run each head independently
+        for (int h = 0; h < numHeads; h++) {
+            for (int i = 0; i < seqLen; i++) {
+                cachedQ[h][i] = project(tokens[i], wQ[h]);
+                cachedK[h][i] = project(tokens[i], wK[h]);
+                cachedV[h][i] = project(tokens[i], wV[h]);
+            }
+
+            for (int i = 0; i < seqLen; i++) {
+                for (int j = 0; j < seqLen; j++) {
+                    cachedScores[h][i][j] = dot(cachedQ[h][i], cachedK[h][j]) / scale;
+                }
+
+                // causal mask
+                for (int j = i + 1; j < seqLen; j++) {
+                    cachedScores[h][i][j] = Double.NEGATIVE_INFINITY;
+                }
+
+                // softmax
+                double max = cachedScores[h][i][0];
+                for (double s : cachedScores[h][i]) if (s > max) max = s;
+                double sum = 0.0;
+                for (int j = 0; j < seqLen; j++) {
+                    cachedScores[h][i][j] = Math.exp(cachedScores[h][i][j] - max);
+                    sum += cachedScores[h][i][j];
+                }
+                for (int j = 0; j < seqLen; j++) cachedScores[h][i][j] /= sum;
+
+                // weighted sum of V
+                Vector out = new Vector(headDim);
+                for (int j = 0; j < seqLen; j++) {
+                    for (int d = 0; d < headDim; d++) {
+                        out.set(d, out.get(d) + cachedScores[h][i][j] * cachedV[h][j].get(d));
+                    }
+                }
+                cachedHeadOut[h][i] = out;
+            }
         }
 
-        double[][] scores = new double[seqLen][seqLen];
+        // concatenate heads and project through wO
         Vector[] output = new Vector[seqLen];
-
         for (int i = 0; i < seqLen; i++) {
-            for (int j = 0; j < seqLen; j++) {
-                scores[i][j] = dot(Q[i], K[j]) / scale;
-            }
-
-            // apply causal mask — block future tokens
-            for (int j = i + 1; j < seqLen; j++) {
-                scores[i][j] = Double.NEGATIVE_INFINITY;
-            }
-
-            double max = scores[i][0];
-            for (double s : scores[i]) if (s > max) max = s;
-            double sum = 0.0;
-            for (int j = 0; j < seqLen; j++) {
-                scores[i][j] = Math.exp(scores[i][j] - max);
-                sum += scores[i][j];
-            }
-            for (int j = 0; j < seqLen; j++) scores[i][j] /= sum;
-
-            Vector out = new Vector(dim);
-            for (int j = 0; j < seqLen; j++) {
-                for (int d = 0; d < dim; d++) {
-                    out.set(d, out.get(d) + scores[i][j] * V[j].get(d));
+            Vector concat = new Vector(dim);
+            for (int h = 0; h < numHeads; h++) {
+                for (int d = 0; d < headDim; d++) {
+                    concat.set(h * headDim + d, cachedHeadOut[h][i].get(d));
                 }
             }
-            output[i] = out;
+            output[i] = project(concat, wO);
         }
-
-        // cache for backprop
-        cachedTokens = tokens;
-        cachedQ = Q;
-        cachedK = K;
-        cachedV = V;
-        cachedScores = scores;
 
         return output;
     }
 
-    // dOutput: gradient w.r.t. output of last token (Vector[dim])
     public void backward(Vector dOutput, double learningRate) {
         int seqLen = cachedTokens.length;
-        double scale = Math.sqrt(dim);
+        double scale = Math.sqrt(headDim);
 
-        // we only backprop through the last token's output
-        int i = seqLen - 1;
+        // backprop through wO for last token
+        int lastToken = seqLen - 1;
 
-        // gradient w.r.t V: dV[j] = scores[i][j] * dOutput
-        Vector[] dV = new Vector[seqLen];
-        for (int j = 0; j < seqLen; j++) {
-            dV[j] = new Vector(dim);
-            for (int d = 0; d < dim; d++) {
-                dV[j].set(d, cachedScores[i][j] * dOutput.get(d));
+        // reconstruct concat for last token
+        Vector concat = new Vector(dim);
+        for (int h = 0; h < numHeads; h++) {
+            for (int d = 0; d < headDim; d++) {
+                concat.set(h * headDim + d, cachedHeadOut[h][lastToken].get(d));
             }
         }
 
-        // gradient w.r.t scores[i][j]: dScores[j] = dOutput · V[j]
-        double[] dScores = new double[seqLen];
-        for (int j = 0; j < seqLen; j++) {
-            dScores[j] = dot(dOutput, cachedV[j]);
-        }
-
-        // backprop through softmax: dRawScores[j] = scores[j] * (dScores[j] - sum(scores * dScores))
-        double dotSD = 0.0;
-        for (int j = 0; j < seqLen; j++) dotSD += cachedScores[i][j] * dScores[j];
-        double[] dRawScores = new double[seqLen];
-        for (int j = 0; j < seqLen; j++) {
-            dRawScores[j] = cachedScores[i][j] * (dScores[j] - dotSD) / scale;
-        }
-
-        // gradient w.r.t Q[i]: dQ = sum_j(dRawScores[j] * K[j])
-        Vector dQ = new Vector(dim);
-        for (int j = 0; j < seqLen; j++) {
-            for (int d = 0; d < dim; d++) {
-                dQ.set(d, dQ.get(d) + dRawScores[j] * cachedK[j].get(d));
+        // gradient w.r.t concat = wO * dOutput  (wO is dim×dim, dOutput is dim)
+        Vector dConcat = new Vector(dim);
+        for (int row = 0; row < dim; row++) {
+            double sum = 0.0;
+            for (int col = 0; col < dim; col++) {
+                sum += wO.get(row, col) * dOutput.get(col);
             }
+            dConcat.set(row, sum);
         }
 
-        // gradient w.r.t K[j]: dK[j] = dRawScores[j] * Q[i]
-        Vector[] dK = new Vector[seqLen];
-        for (int j = 0; j < seqLen; j++) {
-            dK[j] = new Vector(dim);
-            for (int d = 0; d < dim; d++) {
-                dK[j].set(d, dRawScores[j] * cachedQ[i].get(d));
-            }
-        }
-
-        // update wV: for each token j, wV += -lr * outer(tokens[j], dV[j])
-        for (int j = 0; j < seqLen; j++) {
-            for (int row = 0; row < dim; row++) {
-                for (int col = 0; col < dim; col++) {
-                    wV.set(row, col, wV.get(row, col) - learningRate * cachedTokens[j].get(row) * dV[j].get(col));
-                }
-            }
-        }
-
-        // update wQ: wQ += -lr * outer(tokens[i], dQ)
+        // update wO
         for (int row = 0; row < dim; row++) {
             for (int col = 0; col < dim; col++) {
-                wQ.set(row, col, wQ.get(row, col) - learningRate * cachedTokens[i].get(row) * dQ.get(col));
+                wO.set(row, col, wO.get(row, col) - learningRate * concat.get(row) * dOutput.get(col));
             }
         }
 
-        // update wK: for each token j, wK += -lr * outer(tokens[j], dK[j])
-        for (int j = 0; j < seqLen; j++) {
-            for (int row = 0; row < dim; row++) {
-                for (int col = 0; col < dim; col++) {
-                    wK.set(row, col, wK.get(row, col) - learningRate * cachedTokens[j].get(row) * dK[j].get(col));
+        // backprop through each head
+        for (int h = 0; h < numHeads; h++) {
+            // gradient for this head's output at last token
+            Vector dHeadOut = new Vector(headDim);
+            for (int d = 0; d < headDim; d++) {
+                dHeadOut.set(d, dConcat.get(h * headDim + d));
+            }
+
+            // backprop through all tokens for this head
+            for (int i = 0; i < seqLen; i++) {
+                Vector dV_i = new Vector(headDim);
+                for (int j = 0; j <= i; j++) {
+                    for (int d = 0; d < headDim; d++) {
+                        dV_i.set(d, dV_i.get(d) + cachedScores[h][i][j] * dHeadOut.get(d));
+                    }
+                }
+
+                double[] dScores = new double[seqLen];
+                for (int j = 0; j <= i; j++) {
+                    dScores[j] = dot(dHeadOut, cachedV[h][j]);
+                }
+
+                double dotSD = 0.0;
+                for (int j = 0; j <= i; j++) dotSD += cachedScores[h][i][j] * dScores[j];
+                double[] dRaw = new double[seqLen];
+                for (int j = 0; j <= i; j++) {
+                    dRaw[j] = cachedScores[h][i][j] * (dScores[j] - dotSD) / scale;
+                }
+
+                Vector dQ = new Vector(headDim);
+                for (int j = 0; j <= i; j++) {
+                    for (int d = 0; d < headDim; d++) {
+                        dQ.set(d, dQ.get(d) + dRaw[j] * cachedK[h][j].get(d));
+                    }
+                }
+
+                // update wQ, wK, wV for this head
+                for (int row = 0; row < dim; row++) {
+                    for (int d = 0; d < headDim; d++) {
+                        wQ[h].set(row, d, wQ[h].get(row, d) - learningRate * cachedTokens[i].get(row) * dQ.get(d));
+                        wV[h].set(row, d, wV[h].get(row, d) - learningRate * cachedTokens[i].get(row) * dV_i.get(d));
+                    }
+                }
+
+                for (int j = 0; j <= i; j++) {
+                    for (int row = 0; row < dim; row++) {
+                        for (int d = 0; d < headDim; d++) {
+                            wK[h].set(row, d, wK[h].get(row, d) - learningRate * cachedTokens[j].get(row) * dRaw[j] * cachedQ[h][i].get(d));
+                        }
+                    }
                 }
             }
         }

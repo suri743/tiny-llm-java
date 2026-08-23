@@ -36,7 +36,7 @@ public class Main {
         CorpusEncoder<Character> encoder = new CharacterCorpusEncoder();
         EncodedCorpus encodedCorpus = encoder.encode(tokens, vocabulary);
 
-        TrainingConfig config = new TrainingConfig(8, 16, 20, 0.01, 0.9);
+        TrainingConfig config = new TrainingConfig(8, 16, 20, 0.001, 0.9);
         LanguageModel model = new LanguageModel(vocabulary.size(), config);
         Trainer trainer = new Trainer(model, encodedCorpus);
 
