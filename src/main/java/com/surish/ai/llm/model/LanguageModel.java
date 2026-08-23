@@ -5,6 +5,7 @@ import com.surish.ai.llm.embedding.PositionalEmbeddingLayer;
 import com.surish.ai.llm.embedding.RandomEmbeddingLayer;
 import com.surish.ai.llm.nn.CrossEntropyLoss;
 import com.surish.ai.llm.nn.DenseLayer;
+import com.surish.ai.llm.nn.FeedForwardLayer;
 import com.surish.ai.llm.nn.LossFunction;
 import com.surish.ai.llm.nn.SelfAttention;
 import com.surish.ai.llm.nn.SoftmaxLayer;
@@ -20,16 +21,22 @@ public class LanguageModel {
     public final EmbeddingLayer embeddingLayer;
     public final PositionalEmbeddingLayer positionalEmbeddingLayer;
     public final SelfAttention selfAttention;
+    public final FeedForwardLayer feedForward;
     public final DenseLayer outputLayer;
     public final SoftmaxLayer softmaxLayer;
     public final LossFunction lossFunction;
     public final TrainingConfig config;
+
+    // cached between forward and backward
+    public Vector lastAttendedToken;
+    public Vector lastFfnOutput;
 
     public LanguageModel(int vocabSize, TrainingConfig config) {
         this.config = config;
         this.embeddingLayer = new RandomEmbeddingLayer(vocabSize, config.embeddingDim);
         this.positionalEmbeddingLayer = new PositionalEmbeddingLayer(config.contextSize, config.embeddingDim);
         this.selfAttention = new SelfAttention(config.embeddingDim, 4);
+        this.feedForward = new FeedForwardLayer(config.embeddingDim);
         this.outputLayer = new DenseLayer(config.embeddingDim, vocabSize);
         this.softmaxLayer = new SoftmaxLayer();
         this.lossFunction = new CrossEntropyLoss();
@@ -38,8 +45,22 @@ public class LanguageModel {
     // forward pass takes 8 separate token vectors
     public Vector forward(Vector[] tokens) {
         Vector[] attended = selfAttention.forward(tokens);
-        // use last token's attended vector for prediction
-        Vector logits = outputLayer.forward(attended[attended.length - 1]);
+        Vector lastToken = tokens[tokens.length - 1];
+
+        // residual after attention: attended + original input
+        Vector attendedWithResidual = new Vector(config.embeddingDim);
+        for (int d = 0; d < config.embeddingDim; d++)
+            attendedWithResidual.set(d, attended[attended.length - 1].get(d) + lastToken.get(d));
+
+        lastAttendedToken = attendedWithResidual;
+
+        // residual after FFN: ffn(attended) + attended
+        Vector ffnRaw = feedForward.forward(attendedWithResidual);
+        lastFfnOutput = new Vector(config.embeddingDim);
+        for (int d = 0; d < config.embeddingDim; d++)
+            lastFfnOutput.set(d, ffnRaw.get(d) + attendedWithResidual.get(d));
+
+        Vector logits = outputLayer.forward(lastFfnOutput);
         return softmaxLayer.forward(logits);
     }
 

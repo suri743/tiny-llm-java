@@ -52,12 +52,23 @@ public class Trainer {
 
             if (training) {
                 Vector outputGradient = model.lossFunction.gradient(probs, target);
-                Vector attentionGrad = model.outputLayer.backward(tokens[tokens.length - 1], outputGradient, model.config.learningRate);
-                model.selfAttention.backward(attentionGrad, model.config.learningRate);
+                // grad through output layer
+                Vector ffnGrad = model.outputLayer.backward(model.lastFfnOutput, outputGradient, model.config.learningRate);
+                // residual: grad passes through both ffn path and skip path
+                Vector ffnInputGrad = model.feedForward.backward(ffnGrad, model.config.learningRate);
+                Vector dAttendedWithResidual = add(ffnInputGrad, ffnGrad); // ffn path + skip path
+                // residual after attention: grad passes through attention and skip path
+                model.selfAttention.backward(dAttendedWithResidual, model.config.learningRate);
             }
         }
 
         return totalLoss / (end - start);
+    }
+
+    private Vector add(Vector a, Vector b) {
+        Vector result = new Vector(a.size());
+        for (int i = 0; i < a.size(); i++) result.set(i, a.get(i) + b.get(i));
+        return result;
     }
 
     private Vector[] buildTokens(int step) {
