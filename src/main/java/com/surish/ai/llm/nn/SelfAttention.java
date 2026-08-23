@@ -74,6 +74,11 @@ public class SelfAttention {
                 scores[i][j] = dot(Q[i], K[j]) / scale;
             }
 
+            // apply causal mask — block future tokens
+            for (int j = i + 1; j < seqLen; j++) {
+                scores[i][j] = Double.NEGATIVE_INFINITY;
+            }
+
             double max = scores[i][0];
             for (double s : scores[i]) if (s > max) max = s;
             double sum = 0.0;
