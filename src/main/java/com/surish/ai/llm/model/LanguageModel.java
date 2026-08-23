@@ -55,7 +55,7 @@ public class LanguageModel {
             // build context vector from current window
             Vector context = new Vector(config.contextSize * config.embeddingDim);
             for (int c = 0; c < config.contextSize; c++) {
-                Vector emb = embeddingLayer.lookup(contextIds.get(c)).vector();
+                Vector emb = embeddingLayer.lookup(contextIds.get(c));
                 for (int d = 0; d < config.embeddingDim; d++) {
                     context.set(c * config.embeddingDim + d, emb.get(d));
                 }

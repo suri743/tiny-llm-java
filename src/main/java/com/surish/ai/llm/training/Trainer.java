@@ -66,7 +66,7 @@ public class Trainer {
         Vector context = new Vector(contextSize * embeddingDim);
         for (int c = 0; c < contextSize; c++) {
             int tokenId = encodedCorpus.get(step - contextSize + c);
-            Vector tokenEmb = model.embeddingLayer.lookup(tokenId).vector();
+            Vector tokenEmb = model.embeddingLayer.lookup(tokenId);
             Vector posEmb = model.positionalEmbeddingLayer.lookup(c);
             for (int d = 0; d < embeddingDim; d++) {
                 context.set(c * embeddingDim + d, tokenEmb.get(d) + posEmb.get(d));

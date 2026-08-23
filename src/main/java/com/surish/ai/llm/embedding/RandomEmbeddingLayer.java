@@ -1,6 +1,7 @@
 package com.surish.ai.llm.embedding;
 
 import com.surish.ai.llm.tensor.Matrix;
+import com.surish.ai.llm.tensor.Vector;
 
 import java.util.Random;
 
@@ -34,11 +35,8 @@ public class RandomEmbeddingLayer implements EmbeddingLayer {
     }
 
     @Override
-    public Embedding lookup(int tokenId) {
-
-        return new Embedding(
-                embeddings.row(tokenId)
-        );
+    public Vector lookup(int tokenId) {
+        return embeddings.row(tokenId);
     }
 
     @Override

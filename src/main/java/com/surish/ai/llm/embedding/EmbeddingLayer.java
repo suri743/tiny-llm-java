@@ -1,8 +1,10 @@
 package com.surish.ai.llm.embedding;
 
+import com.surish.ai.llm.tensor.Vector;
+
 public interface EmbeddingLayer {
 
-    Embedding lookup(int tokenId);
+    Vector lookup(int tokenId);
 
     int vocabularySize();
 
