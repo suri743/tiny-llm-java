@@ -36,10 +36,13 @@ public class Main {
         CorpusEncoder<Character> encoder = new CharacterCorpusEncoder();
         EncodedCorpus encodedCorpus = encoder.encode(tokens, vocabulary);
 
-        TrainingConfig config = new TrainingConfig(8, 16, 3, 0.01, 0.9);
+        TrainingConfig config = new TrainingConfig(8, 16, 50, 0.01, 0.9);
         LanguageModel model = new LanguageModel(vocabulary.size(), config);
         Trainer trainer = new Trainer(model, encodedCorpus);
 
         trainer.train();
+
+        System.out.println("\n--- Prediction ---\n");
+        System.out.println(model.predict("F", 200, vocabulary));
     }
 }
