@@ -49,45 +49,55 @@ public class Main {
         LossFunction lossFunction = new CrossEntropyLoss();
 
         double learningRate = 0.01;
-        int trainingExamples = 100;
+        int epochs = 3;
+        int logInterval = 10000;
+        int totalTokens = encodedCorpus.size() - 1;
 
-        System.out.println("\n--- Training on first " + trainingExamples + " token pairs ---\n");
+        System.out.println("\n--- Training on " + totalTokens + " token pairs ---\n");
 
-        for (int step = 0; step < trainingExamples; step++) {
+        for (int epoch = 1; epoch <= epochs; epoch++) {
 
-            int inputTokenId = encodedCorpus.get(step);
-            int targetTokenId = encodedCorpus.get(step + 1);
+            double epochLoss = 0.0;
+            double intervalLoss = 0.0;
 
-            char inputChar = vocabulary.decode(inputTokenId);
-            char targetChar = vocabulary.decode(targetTokenId);
+            for (int step = 0; step < totalTokens; step++) {
 
-            // Forward pass
-            Embedding embedding = embeddingLayer.lookup(inputTokenId);
-            Vector logits = denseLayer.forward(embedding.vector());
-            Vector probs = softmaxLayer.forward(logits);
+                int inputTokenId = encodedCorpus.get(step);
+                int targetTokenId = encodedCorpus.get(step + 1);
 
-            // Target: one-hot over vocab size
-            Vector target = new Vector(vocabulary.size());
-            target.set(targetTokenId, 1.0);
+                // Forward pass
+                Embedding embedding = embeddingLayer.lookup(inputTokenId);
+                Vector logits = denseLayer.forward(embedding.vector());
+                Vector probs = softmaxLayer.forward(logits);
 
-            double loss = lossFunction.calculate(probs, target);
+                // Target: one-hot over vocab size
+                Vector target = new Vector(vocabulary.size());
+                target.set(targetTokenId, 1.0);
 
-            // Backward pass
-            Vector outputGradient = lossFunction.gradient(probs, target);
-            Vector embeddingGradient = denseLayer.backward(embedding.vector(), outputGradient, learningRate);
+                double loss = lossFunction.calculate(probs, target);
+                epochLoss += loss;
+                intervalLoss += loss;
 
-            // Update embedding
-            Vector embeddingVector = embedding.vector();
-            for (int i = 0; i < embeddingVector.size(); i++) {
-                embeddingVector.set(i, embeddingVector.get(i) - learningRate * embeddingGradient.get(i));
+                // Backward pass
+                Vector outputGradient = lossFunction.gradient(probs, target);
+                Vector embeddingGradient = denseLayer.backward(embedding.vector(), outputGradient, learningRate);
+
+                // Update embedding
+                Vector embeddingVector = embedding.vector();
+                for (int i = 0; i < embeddingVector.size(); i++) {
+                    embeddingVector.set(i, embeddingVector.get(i) - learningRate * embeddingGradient.get(i));
+                }
+
+                if ((step + 1) % logInterval == 0) {
+                    System.out.printf("Epoch %d | Step %7d | avg loss: %.4f%n",
+                        epoch, step + 1, intervalLoss / logInterval);
+                    intervalLoss = 0.0;
+                }
             }
 
-            if (step < 5 || step == trainingExamples - 1) {
-                System.out.printf("Step %3d | '%c' -> '%c' | loss: %.6f%n",
-                    step, inputChar, targetChar, loss);
-            }
+            System.out.printf("%nEpoch %d complete | avg loss: %.4f%n%n", epoch, epochLoss / totalTokens);
         }
 
-        System.out.println("\n--- Done: " + trainingExamples + " training steps complete ---");
+        System.out.println("--- Training complete ---");
     }
 }

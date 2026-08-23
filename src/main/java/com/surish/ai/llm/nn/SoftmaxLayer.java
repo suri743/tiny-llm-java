@@ -18,6 +18,8 @@ public class SoftmaxLayer {
             sum += val;
         }
 
+        if (sum == 0.0) sum = 1e-12;
+
         for (int i = 0; i < probs.size(); i++) {
             probs.set(i, probs.get(i) / sum);
         }
