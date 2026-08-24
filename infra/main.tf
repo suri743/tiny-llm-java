@@ -41,7 +41,7 @@ resource "aws_iam_role_policy" "s3_read" {
     Version = "2012-10-17"
     Statement = [{
       Effect = "Allow"
-      Action = ["s3:GetObject", "s3:ListBucket"]
+      Action = ["s3:GetObject", "s3:ListBucket", "s3:PutObject"]
       Resource = [
         aws_s3_bucket.llm_training.arn,
         "${aws_s3_bucket.llm_training.arn}/*"
@@ -159,6 +159,12 @@ resource "aws_instance" "training" {
     nohup java -Xmx3g -jar tiny-llm.jar > /opt/llm-training/training.log 2>&1 &
 
     echo "Training started"
+
+    # Upload log to S3 every 5 minutes
+    while true; do
+      sleep 300
+      aws s3 cp /opt/llm-training/training.log s3://instyte-llm-training/training.log
+    done &
   EOF
 
   tags = { Name = "llm-training" }
