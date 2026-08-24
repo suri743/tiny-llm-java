@@ -40,7 +40,7 @@ public class Main {
         CorpusEncoder<Character> encoder = new CharacterCorpusEncoder();
         EncodedCorpus encodedCorpus = encoder.encode(tokens, vocabulary);
 
-        TrainingConfig config = new TrainingConfig(16, 32, 3, 4, 50, 0.0001, 0.9);
+        TrainingConfig config = new TrainingConfig(64, 128, 6, 8, 30, 0.0001, 0.9);
         LanguageModel model = new LanguageModel(vocabulary.size(), config);
 
         if (new File(MODEL_PATH).exists()) {
