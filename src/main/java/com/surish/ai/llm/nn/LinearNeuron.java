@@ -6,7 +6,7 @@ import java.util.Random;
 
 public class LinearNeuron implements Neuron {
 
-    private static final Random random = new Random(42);
+    private static final Random random = new Random();
 
     private final Vector weights;
     private double bias;

@@ -9,7 +9,7 @@ public class RandomEmbeddingLayer implements EmbeddingLayer {
 
     private final Matrix embeddings;
 
-    private final Random random = new Random(42);
+    private final Random random = new Random();
 
     public RandomEmbeddingLayer(int vocabularySize,
                                 int embeddingDimension) {

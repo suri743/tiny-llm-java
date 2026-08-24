@@ -45,7 +45,7 @@ public class SelfAttention {
 
     private Matrix randomMatrix(int rows, int cols) {
         Matrix m = new Matrix(rows, cols);
-        Random random = new Random(42);
+        Random random = new Random();
         for (int i = 0; i < rows; i++)
             for (int j = 0; j < cols; j++)
                 m.set(i, j, random.nextGaussian() * 0.02);

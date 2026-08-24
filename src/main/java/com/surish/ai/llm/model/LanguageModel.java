@@ -5,10 +5,9 @@ import com.surish.ai.llm.embedding.PositionalEmbeddingLayer;
 import com.surish.ai.llm.embedding.RandomEmbeddingLayer;
 import com.surish.ai.llm.nn.CrossEntropyLoss;
 import com.surish.ai.llm.nn.DenseLayer;
-import com.surish.ai.llm.nn.FeedForwardLayer;
 import com.surish.ai.llm.nn.LossFunction;
-import com.surish.ai.llm.nn.SelfAttention;
 import com.surish.ai.llm.nn.SoftmaxLayer;
+import com.surish.ai.llm.nn.TransformerBlock;
 import com.surish.ai.llm.tensor.Vector;
 import com.surish.ai.llm.training.TrainingConfig;
 import com.surish.ai.llm.vocabulary.Vocabulary;
@@ -21,47 +20,33 @@ public class LanguageModel {
 
     public final EmbeddingLayer embeddingLayer;
     public final PositionalEmbeddingLayer positionalEmbeddingLayer;
-    public final SelfAttention selfAttention;
-    public final FeedForwardLayer feedForward;
+    public final TransformerBlock[] blocks;
     public final DenseLayer outputLayer;
     public final SoftmaxLayer softmaxLayer;
     public final LossFunction lossFunction;
     public final TrainingConfig config;
 
     // cached between forward and backward
-    public Vector lastAttendedToken;
-    public Vector lastFfnOutput;
+    public Vector lastBlockOutput;
 
     public LanguageModel(int vocabSize, TrainingConfig config) {
         this.config = config;
         this.embeddingLayer = new RandomEmbeddingLayer(vocabSize, config.embeddingDim);
         this.positionalEmbeddingLayer = new PositionalEmbeddingLayer(config.contextSize, config.embeddingDim);
-        this.selfAttention = new SelfAttention(config.embeddingDim, 4);
-        this.feedForward = new FeedForwardLayer(config.embeddingDim);
+        this.blocks = new TransformerBlock[config.numLayers];
+        for (int i = 0; i < config.numLayers; i++)
+            blocks[i] = new TransformerBlock(config.embeddingDim, config.numHeads);
         this.outputLayer = new DenseLayer(config.embeddingDim, vocabSize);
         this.softmaxLayer = new SoftmaxLayer();
         this.lossFunction = new CrossEntropyLoss();
     }
 
-    // forward pass takes 8 separate token vectors
     public Vector forward(Vector[] tokens) {
-        Vector[] attended = selfAttention.forward(tokens);
-        Vector lastToken = tokens[tokens.length - 1];
-
-        // residual after attention: attended + original input
-        Vector attendedWithResidual = new Vector(config.embeddingDim);
-        for (int d = 0; d < config.embeddingDim; d++)
-            attendedWithResidual.set(d, attended[attended.length - 1].get(d) + lastToken.get(d));
-
-        lastAttendedToken = attendedWithResidual;
-
-        // residual after FFN: ffn(attended) + attended
-        Vector ffnRaw = feedForward.forward(attendedWithResidual);
-        lastFfnOutput = new Vector(config.embeddingDim);
-        for (int d = 0; d < config.embeddingDim; d++)
-            lastFfnOutput.set(d, ffnRaw.get(d) + attendedWithResidual.get(d));
-
-        Vector logits = outputLayer.forward(lastFfnOutput);
+        Vector[] x = tokens;
+        for (TransformerBlock block : blocks)
+            x = block.forward(x);
+        lastBlockOutput = x[x.length - 1];
+        Vector logits = outputLayer.forward(lastBlockOutput);
         return softmaxLayer.forward(logits);
     }
 
@@ -86,9 +71,7 @@ public class LanguageModel {
         for (int i = 0; i < length; i++) {
             Vector[] tokens = buildTokens(contextIds);
             Vector probs = forward(tokens);
-
             int nextTokenId = sample(probs, temperature, random);
-
             output.append(vocabulary.decode(nextTokenId));
             contextIds.remove(0);
             contextIds.add(nextTokenId);
@@ -97,16 +80,13 @@ public class LanguageModel {
         return output.toString();
     }
 
-    // sample a token index from probability distribution with temperature scaling
     private int sample(Vector probs, double temperature, Random random) {
-        // apply temperature: divide logits by temperature then re-normalize
         double[] scaled = new double[probs.size()];
         double sum = 0.0;
         for (int i = 0; i < probs.size(); i++) {
             scaled[i] = Math.pow(probs.get(i), 1.0 / temperature);
             sum += scaled[i];
         }
-        // pick by cumulative probability (roulette wheel)
         double r = random.nextDouble() * sum;
         double cumulative = 0.0;
         for (int i = 0; i < scaled.length; i++) {
@@ -122,9 +102,8 @@ public class LanguageModel {
             Vector tokenEmb = embeddingLayer.lookup(contextIds.get(c));
             Vector posEmb = positionalEmbeddingLayer.lookup(c);
             Vector combined = new Vector(config.embeddingDim);
-            for (int d = 0; d < config.embeddingDim; d++) {
+            for (int d = 0; d < config.embeddingDim; d++)
                 combined.set(d, tokenEmb.get(d) + posEmb.get(d));
-            }
             tokens[c] = combined;
         }
         return tokens;

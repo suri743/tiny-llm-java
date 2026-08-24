@@ -4,6 +4,9 @@ import com.surish.ai.llm.encoding.EncodedCorpus;
 import com.surish.ai.llm.model.LanguageModel;
 import com.surish.ai.llm.tensor.Vector;
 
+import java.time.LocalTime;
+import java.time.format.DateTimeFormatter;
+
 public class Trainer {
 
     private final LanguageModel model;
@@ -25,19 +28,25 @@ public class Trainer {
         System.out.println("\n--- Training ---\n");
 
         for (int epoch = 1; epoch <= model.config.epochs; epoch++) {
-            double trainLoss = runEpoch(true);
-            double valLoss = runEpoch(false);
-            System.out.printf("Epoch %d complete | train loss: %.4f | val loss: %.4f%n%n",
+            System.out.printf("Epoch %d/%d%n", epoch, model.config.epochs);
+            double trainLoss = runEpoch(true, epoch);
+            double valLoss = runEpoch(false, epoch);
+            System.out.printf("%nEpoch %d complete | train loss: %.4f | val loss: %.4f%n%n",
                 epoch, trainLoss, valLoss);
         }
 
         System.out.println("--- Training complete ---");
     }
 
-    private double runEpoch(boolean training) {
+    private double runEpoch(boolean training, int epoch) {
         int start = training ? model.config.contextSize : trainSize;
-        int end = training ? trainSize : totalTokens;
+        int end = training ? trainSize : totalTokens - 1;
+        int total = end - start;
         double totalLoss = 0.0;
+
+        long epochStart = System.currentTimeMillis();
+        int logInterval = total / 20; // print 20 updates per epoch
+        if (logInterval < 1) logInterval = 1;
 
         for (int step = start; step < end; step++) {
             Vector[] tokens = buildTokens(step);
@@ -52,23 +61,51 @@ public class Trainer {
 
             if (training) {
                 Vector outputGradient = model.lossFunction.gradient(probs, target);
-                // grad through output layer
-                Vector ffnGrad = model.outputLayer.backward(model.lastFfnOutput, outputGradient, model.config.learningRate);
-                // residual: grad passes through both ffn path and skip path
-                Vector ffnInputGrad = model.feedForward.backward(ffnGrad, model.config.learningRate);
-                Vector dAttendedWithResidual = add(ffnInputGrad, ffnGrad); // ffn path + skip path
-                // residual after attention: grad passes through attention and skip path
-                model.selfAttention.backward(dAttendedWithResidual, model.config.learningRate);
+                outputGradient = clip(outputGradient, 1.0);
+                Vector grad = model.outputLayer.backward(model.lastBlockOutput, outputGradient, model.config.learningRate);
+                for (int b = model.blocks.length - 1; b >= 0; b--) {
+                    grad = clip(grad, 1.0);
+                    grad = model.blocks[b].backward(grad, model.config.learningRate);
+                }
+            }
+
+            int done = step - start + 1;
+            if (done % logInterval == 0 || done == total) {
+                int pct = done * 100 / total;
+                long elapsed = System.currentTimeMillis() - epochStart;
+                long etaMs = done < total ? (elapsed * (total - done) / done) : 0;
+                double avgLoss = totalLoss / done;
+                String phase = training ? "train" : "val";
+                System.out.printf("\r  [%s] %3d%% | loss: %.4f | elapsed: %s | eta: %s",
+                    phase, pct, avgLoss, formatTime(elapsed), formatTime(etaMs));
             }
         }
 
-        return totalLoss / (end - start);
+        return totalLoss / total;
     }
 
-    private Vector add(Vector a, Vector b) {
-        Vector result = new Vector(a.size());
-        for (int i = 0; i < a.size(); i++) result.set(i, a.get(i) + b.get(i));
-        return result;
+    private String formatTime(long ms) {
+        long secs = ms / 1000;
+        if (secs < 60) return secs + "s";
+        long mins = secs / 60;
+        secs = secs % 60;
+        if (mins < 60) return mins + "m " + secs + "s";
+        long hrs = mins / 60;
+        mins = mins % 60;
+        return hrs + "h " + mins + "m";
+    }
+
+    private Vector clip(Vector v, double maxNorm) {
+        double norm = 0.0;
+        for (int i = 0; i < v.size(); i++) norm += v.get(i) * v.get(i);
+        norm = Math.sqrt(norm);
+        if (norm > maxNorm) {
+            double scale = maxNorm / norm;
+            Vector clipped = new Vector(v.size());
+            for (int i = 0; i < v.size(); i++) clipped.set(i, v.get(i) * scale);
+            return clipped;
+        }
+        return v;
     }
 
     private Vector[] buildTokens(int step) {
@@ -81,9 +118,8 @@ public class Trainer {
             Vector tokenEmb = model.embeddingLayer.lookup(tokenId);
             Vector posEmb = model.positionalEmbeddingLayer.lookup(c);
             Vector combined = new Vector(embeddingDim);
-            for (int d = 0; d < embeddingDim; d++) {
+            for (int d = 0; d < embeddingDim; d++)
                 combined.set(d, tokenEmb.get(d) + posEmb.get(d));
-            }
             tokens[c] = combined;
         }
         return tokens;

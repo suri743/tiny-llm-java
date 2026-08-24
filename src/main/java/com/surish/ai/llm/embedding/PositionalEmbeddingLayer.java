@@ -11,7 +11,7 @@ public class PositionalEmbeddingLayer {
 
     public PositionalEmbeddingLayer(int contextSize, int embeddingDim) {
         embeddings = new Matrix(contextSize, embeddingDim);
-        Random random = new Random(42);
+        Random random = new Random();
         for (int row = 0; row < contextSize; row++) {
             for (int col = 0; col < embeddingDim; col++) {
                 embeddings.set(row, col, random.nextGaussian() * 0.02);
