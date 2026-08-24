@@ -31,6 +31,8 @@ jobs:
         with:
           role-to-assume: arn:aws:iam::652386518241:role/instyte-dev-github-actions
           aws-region: ${{ env.AWS_REGION }}
+          role-session-name: llm-training
+          unset-current-credentials: true
 
       # ============================
       # BUILD FAT JAR
