@@ -75,6 +75,10 @@ jobs:
         working-directory: infra
         run: terraform init
 
+      - name: Terraform Destroy existing instance
+        working-directory: infra
+        run: terraform destroy -target=aws_instance.training -auto-approve || true
+
       - name: Terraform Apply
         working-directory: infra
         run: terraform apply -auto-approve
