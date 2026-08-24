@@ -156,7 +156,7 @@ resource "aws_instance" "training" {
     aws s3 cp s3://instyte-llm-training/tiny-llm.jar /opt/llm-training/tiny-llm.jar
 
     cd /opt/llm-training
-    nohup java -Xmx3g -jar tiny-llm.jar > /opt/llm-training/training.log 2>&1 &
+    nohup bash -c 'java -Xmx3g -jar tiny-llm.jar > /opt/llm-training/training.log 2>&1; aws s3 cp /opt/llm-training/model.bin s3://instyte-llm-training/model.bin; aws s3 cp /opt/llm-training/training.log s3://instyte-llm-training/training.log' &
 
     echo "Training started"
 
